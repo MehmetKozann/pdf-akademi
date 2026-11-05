@@ -67,8 +67,9 @@ export async function getCurrentUser(): Promise<UserProfile> {
   }
 
   const now = new Date().toISOString();
+  const defaultUserId = "00000000-0000-4000-8000-000000000001";
   const defaultUser: UserProfile = {
-    id: crypto.randomUUID(),
+    id: defaultUserId,
     email: "ogrenci@akademikai.local",
     full_name: "Öğrenci",
     university: "",
