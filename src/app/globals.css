@@ -1,0 +1,166 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg-canvas: #f4ede0;
+  --bg-surface: #ffffff;
+  --bg-subtle: #faf6ee;
+  --fg-primary: #14213d;
+  --fg-secondary: #334155;
+  --fg-muted: #64748b;
+  --border-subtle: #e5dccb;
+  --brand-primary: #14213d;
+  --brand-primary-hover: #1e3158;
+  --brand-accent: #ff6b5b;
+  --brand-soft: #fdf7ed;
+}
+
+.dark {
+  --bg-canvas: #0b1120;
+  --bg-surface: #14213d;
+  --bg-subtle: #1c2d52;
+  --fg-primary: #f4ede0;
+  --fg-secondary: #cbd5e1;
+  --fg-muted: #94a3b8;
+  --border-subtle: #24365e;
+  --brand-primary: #ff6b5b;
+  --brand-primary-hover: #e85646;
+  --brand-accent: #f4ede0;
+  --brand-soft: rgba(255, 107, 91, 0.12);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg-canvas);
+  color: var(--fg-primary);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+a,
+select,
+[role="button"] {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* Academic Markdown Prose Styling */
+.academic-prose {
+  line-height: 1.75;
+  font-size: 0.965rem;
+}
+
+.academic-prose h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-top: 1.5rem;
+  margin-bottom: 0.85rem;
+  letter-spacing: -0.02em;
+}
+
+.academic-prose h2 {
+  font-size: 1.28rem;
+  font-weight: 700;
+  margin-top: 1.65rem;
+  margin-bottom: 0.65rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--brand-primary);
+}
+
+.academic-prose h3 {
+  font-size: 1.08rem;
+  font-weight: 600;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.academic-prose p {
+  margin-bottom: 0.9rem;
+}
+
+.academic-prose ul,
+.academic-prose ol {
+  margin-bottom: 1rem;
+  padding-left: 1.4rem;
+}
+
+.academic-prose ul {
+  list-style-type: disc;
+}
+
+.academic-prose ol {
+  list-style-type: decimal;
+}
+
+.academic-prose li {
+  margin-bottom: 0.35rem;
+}
+
+.academic-prose blockquote {
+  border-left: 3px solid #ff6b5b;
+  background-color: var(--brand-soft);
+  padding: 0.85rem 1rem;
+  border-radius: 0 0.75rem 0.75rem 0;
+  margin: 1rem 0;
+}
+
+.academic-prose code {
+  font-family: var(--font-mono), monospace;
+  background-color: var(--bg-subtle);
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.375rem;
+  font-size: 0.875em;
+}
+
+.academic-prose pre {
+  background-color: #14213d;
+  color: #f4ede0;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+.academic-prose pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.academic-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.15rem 0;
+  font-size: 0.9rem;
+}
+
+.academic-prose th,
+.academic-prose td {
+  border: 1px solid var(--border-subtle);
+  padding: 0.6rem 0.8rem;
+  text-align: left;
+}
+
+.academic-prose th {
+  background-color: var(--bg-subtle);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
