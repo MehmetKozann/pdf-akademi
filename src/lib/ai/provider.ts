@@ -153,44 +153,58 @@ export async function completeWithLLM(
   }
 
   if (cfg.provider === "gemini") {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-      cfg.model
-    )}:generateContent`;
+    const tryGenerateWithModel = async (modelName: string) => {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+        modelName
+      )}:generateContent`;
 
-    const generationConfig: Record<string, unknown> = {
-      temperature: Math.max(temperature, 0.4),
-      maxOutputTokens: Math.min(Math.max(maxTokens, 4096), 8192),
-      ...(params.jsonMode ? { responseMimeType: "application/json" } : {}),
-    };
+      const genConfig: Record<string, unknown> = {
+        temperature: Math.max(temperature, 0.4),
+        maxOutputTokens: Math.min(Math.max(maxTokens, 4096), 8192),
+        ...(params.jsonMode ? { responseMimeType: "application/json" } : {}),
+      };
 
-    // Cap thinking budget on Gemini 2.5 Flash so responses are fast and never starve output tokens
-    if (cfg.model.includes("2.5-flash")) {
-      generationConfig.thinkingConfig = { thinkingBudget: 256 };
-    }
+      if (modelName.includes("2.5-flash")) {
+        genConfig.thinkingConfig = { thinkingBudget: 256 };
+      }
 
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": cfg.apiKey,
-      },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [
+      return fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": cfg.apiKey,
+        },
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [
+              {
+                text: `${params.systemPrompt}\nKESİN BİÇİM KURALI: Markdown tablosu yazarken hizalama işareti (:---) ASLA kullanma; ayırıcı satırı yalnızca düz ve kısa "| --- | --- |" şeklinde yaz.`,
+              },
+            ],
+          },
+          contents: [
             {
-              text: `${params.systemPrompt}\nKESİN BİÇİM KURALI: Markdown tablosu yazarken hizalama işareti (:---) ASLA kullanma; ayırıcı satırı yalnızca düz ve kısa "| --- | --- |" şeklinde yaz.`,
+              role: "user",
+              parts: [{ text: params.userPrompt }],
             },
           ],
-        },
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: params.userPrompt }],
-          },
-        ],
-        generationConfig,
-      }),
-    });
+          generationConfig: genConfig,
+        }),
+      });
+    };
+
+    // 1. Try with the requested model (e.g. gemini-2.5-flash)
+    let res = await tryGenerateWithModel(cfg.model);
+
+    // 2. If 503 (high demand) or 429, retry once after a short wait with fallback (gemini-2.0-flash / gemini-1.5-flash)
+    if (res.status === 503 || res.status === 429) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const fallbackModel = cfg.model.includes("2.5") ? "gemini-2.0-flash" : "gemini-1.5-flash";
+      const fallbackRes = await tryGenerateWithModel(fallbackModel);
+      if (fallbackRes.ok) {
+        res = fallbackRes;
+      }
+    }
 
     if (!res.ok) {
       const errText = await res.text();
