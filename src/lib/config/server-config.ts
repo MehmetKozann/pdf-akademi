@@ -2,7 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import type { AIProviderType } from "@/types/database";
 
-const DATA_DIR = path.join(process.cwd(), ".data");
+const DATA_DIR = process.env.VERCEL
+  ? path.join("/tmp", "akademik-ai-data")
+  : path.join(process.cwd(), ".data");
 const RUNTIME_CONFIG_FILE = path.join(DATA_DIR, "server-config.json");
 
 export interface RuntimeServerOverrides {

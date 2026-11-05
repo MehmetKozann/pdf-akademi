@@ -3,6 +3,8 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getPublicSystemStatus } from "@/lib/config/server-config";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 
+export const dynamic = "force-dynamic";
+
 export default async function PanelLayout({
   children,
 }: {
