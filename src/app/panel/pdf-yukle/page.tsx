@@ -84,12 +84,17 @@ export default function PdfUploadPage() {
   }, [loadData]);
 
   async function processFiles(fileList: FileList | File[]) {
-    const files = Array.from(fileList).filter((f) =>
-      f.name.toLowerCase().endsWith(".pdf")
-    );
+    const files = Array.from(fileList).filter((f) => {
+      const lower = f.name.toLowerCase();
+      return (
+        lower.endsWith(".pdf") ||
+        lower.endsWith(".docx") ||
+        lower.endsWith(".pptx")
+      );
+    });
 
     if (files.length === 0) {
-      toast("Lütfen geçerli bir PDF (.pdf) dosyası seçiniz.", "error");
+      toast("Lütfen geçerli bir PDF (.pdf), Word (.docx) veya PowerPoint (.pptx) dosyası seçiniz.", "error");
       return;
     }
 
@@ -102,7 +107,7 @@ export default function PdfUploadPage() {
           fileSize: file.size,
           status: "uploading",
           progress: 25,
-          message: "PDF yükleniyor ve metin/yapı analiz ediliyor...",
+          message: "Belge yükleniyor ve metin/yapı analiz ediliyor...",
         },
         ...prev,
       ]);
@@ -376,7 +381,7 @@ export default function PdfUploadPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="application/pdf,.pdf"
+            accept=".pdf,.docx,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
             multiple
             className="hidden"
             onChange={(e) => {
@@ -391,11 +396,11 @@ export default function PdfUploadPage() {
             <FileUp className="w-7 h-7" />
           </div>
           <h3 className="text-base sm:text-lg font-semibold text-[#14213D] dark:text-white">
-            PDF dosyalarınızı buraya sürükleyip bırakın
+            PDF, Word (.docx) ve PowerPoint (.pptx) belgelerinizi buraya sürükleyin
           </h3>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-300 mt-1.5 max-w-md mx-auto">
-            Birden fazla PDF dosyasını aynı anda yükleyebilirsiniz. Taranmış
-            belgeler için otomatik OCR desteği bulunur (Maks. 25 MB / dosya).
+            Ders slaytları, sunumlar ve notları aynı anda yükleyebilirsiniz.
+            Yapay zeka başlıkları, slaytları ve kavramları otomatik çıkarır (Maks. 25 MB).
           </p>
           <button
             type="button"

@@ -271,36 +271,101 @@ export async function extractAndChunkPdf(params: {
   buffer: Buffer;
   documentId: string;
   userId: string;
+  fileName?: string;
 }): Promise<ProcessedPdfResult> {
+  const fileNameLower = (params.fileName || "").toLowerCase();
   let rawPageTexts: string[] = [];
 
-  // Primary: unpdf page-by-page extraction
-  try {
-    const { extractText } = await import("unpdf");
-    const extracted = await extractText(new Uint8Array(params.buffer), {
-      mergePages: false,
-    });
-    if (Array.isArray(extracted.text)) {
-      rawPageTexts = extracted.text;
-    } else if (typeof extracted.text === "string") {
-      rawPageTexts = [extracted.text];
-    }
-  } catch {
-    // Fallback: pdf-parse
+  // 1. DOCX Extraction (Word document)
+  if (fileNameLower.endsWith(".docx")) {
     try {
-      // Import inner module directly so pdf-parse doesn't run debug check
-      const pdfParseModule = await import("pdf-parse/lib/pdf-parse.js");
-      const pdfParse = pdfParseModule.default || pdfParseModule;
-      const parsed = await pdfParse(params.buffer);
-      const splitPages = String(parsed.text || "").split(/\f/);
-      rawPageTexts =
-        splitPages.length > 1
-          ? splitPages
-          : [String(parsed.text || "")];
-    } catch (err) {
+      const mammoth = await import("mammoth");
+      const result = await mammoth.extractRawText({ buffer: params.buffer });
+      const fullText = result.value || "";
+      // Split into logical sections/pages of ~2000 chars or double newlines
+      const paragraphs = fullText.split(/\n\s*\n/).filter((p) => p.trim().length > 0);
+      const virtualPages: string[] = [];
+      let currentPage = "";
+
+      for (const p of paragraphs) {
+        if (currentPage.length + p.length > 2200) {
+          virtualPages.push(currentPage.trim());
+          currentPage = p;
+        } else {
+          currentPage = currentPage ? `${currentPage}\n\n${p}` : p;
+        }
+      }
+      if (currentPage.trim()) {
+        virtualPages.push(currentPage.trim());
+      }
+      rawPageTexts = virtualPages.length > 0 ? virtualPages : [fullText];
+    } catch (docxErr) {
       throw new Error(
-        `PDF metni ayrıştırılamadı: ${err instanceof Error ? err.message : "Bilinmeyen hata"}`
+        `Word (.docx) belgesi okunamadı: ${docxErr instanceof Error ? docxErr.message : "Bilinmeyen hata"}`
       );
+    }
+  } else if (fileNameLower.endsWith(".pptx")) {
+    // 2. PPTX Extraction (PowerPoint presentation slides)
+    try {
+      const JSZip = (await import("jszip")).default;
+      const zip = await JSZip.loadAsync(params.buffer);
+      // Find all slides: ppt/slides/slide1.xml, slide2.xml...
+      const slideFiles = Object.keys(zip.files)
+        .filter((f) => /^ppt\/slides\/slide\d+\.xml$/i.test(f))
+        .sort((a, b) => {
+          const numA = parseInt(a.match(/\d+/)![0], 10);
+          const numB = parseInt(b.match(/\d+/)![0], 10);
+          return numA - numB;
+        });
+
+      if (slideFiles.length > 0) {
+        for (const sf of slideFiles) {
+          const xml = await zip.files[sf].async("text");
+          // Extract text inside <a:t>...</a:t>
+          const matches = xml.match(/<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>/gi) || [];
+          const slideText = matches
+            .map((m) => m.replace(/<[^>]+>/g, "").trim())
+            .filter(Boolean)
+            .join(" ");
+          rawPageTexts.push(slideText);
+        }
+      } else {
+        // Fallback: search all XMLs for text
+        rawPageTexts = ["Sunum slayt metinleri çıkarılamadı."];
+      }
+    } catch (pptxErr) {
+      throw new Error(
+        `PowerPoint (.pptx) sunumu okunamadı: ${pptxErr instanceof Error ? pptxErr.message : "Bilinmeyen hata"}`
+      );
+    }
+  } else {
+    // 3. PDF Extraction (unpdf + pdf-parse fallback)
+    try {
+      const { extractText } = await import("unpdf");
+      const extracted = await extractText(new Uint8Array(params.buffer), {
+        mergePages: false,
+      });
+      if (Array.isArray(extracted.text)) {
+        rawPageTexts = extracted.text;
+      } else if (typeof extracted.text === "string") {
+        rawPageTexts = [extracted.text];
+      }
+    } catch {
+      // Fallback: pdf-parse
+      try {
+        const pdfParseModule = await import("pdf-parse/lib/pdf-parse.js");
+        const pdfParse = pdfParseModule.default || pdfParseModule;
+        const parsed = await pdfParse(params.buffer);
+        const splitPages = String(parsed.text || "").split(/\f/);
+        rawPageTexts =
+          splitPages.length > 1
+            ? splitPages
+            : [String(parsed.text || "")];
+      } catch (err) {
+        throw new Error(
+          `PDF metni ayrıştırılamadı: ${err instanceof Error ? err.message : "Bilinmeyen hata"}`
+        );
+      }
     }
   }
 

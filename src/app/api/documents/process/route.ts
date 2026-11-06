@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
         buffer,
         documentId,
         userId: user.id,
+        fileName,
       });
 
       // 4. Generate embeddings (batch 32)
@@ -155,3 +156,4 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+

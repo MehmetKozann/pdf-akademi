@@ -188,16 +188,28 @@ export const repository = {
   // ---------------------------------------------------------------------------
   async uploadPdfBinary(
     userId: string,
-    documentId: string,
+    fileIdentifier: string,
     buffer: Buffer
   ): Promise<string> {
-    const storagePath = `${userId}/${documentId}.pdf`;
+    const filename = fileIdentifier.includes(".")
+      ? fileIdentifier
+      : `${fileIdentifier}.pdf`;
+    const storagePath = `${userId}/${filename}`;
     if (isSupabaseConfigured()) {
       const supabase = await createSupabaseServerClient();
+      let contentType = "application/pdf";
+      if (filename.endsWith(".docx")) {
+        contentType =
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      } else if (filename.endsWith(".pptx")) {
+        contentType =
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+      }
+
       const { error } = await supabase.storage
         .from("documents")
         .upload(storagePath, buffer, {
-          contentType: "application/pdf",
+          contentType,
           upsert: true,
         });
       if (error) throw new Error(`Depolama hatası: ${error.message}`);

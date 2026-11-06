@@ -19,9 +19,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!fileName.toLowerCase().endsWith(".pdf")) {
+    const lowerName = fileName.toLowerCase();
+    const isAllowed =
+      lowerName.endsWith(".pdf") ||
+      lowerName.endsWith(".docx") ||
+      lowerName.endsWith(".pptx");
+
+    if (!isAllowed) {
       return NextResponse.json(
-        { error: "Yalnızca PDF dosyaları desteklenmektedir." },
+        { error: "Yalnızca PDF (.pdf), Word (.docx) ve PowerPoint (.pptx) dosyaları desteklenmektedir." },
         { status: 400 }
       );
     }
@@ -35,7 +41,8 @@ export async function POST(req: NextRequest) {
 
     const documentId = crypto.randomUUID();
     const safeFileName = sanitizeFileName(fileName);
-    const storagePath = `${user.id}/${documentId}.pdf`;
+    const ext = safeFileName.split(".").pop() || "pdf";
+    const storagePath = `${user.id}/${documentId}.${ext}`;
 
     if (isSupabaseConfigured()) {
       const supabase = await createSupabaseServerClient();
@@ -72,3 +79,4 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+

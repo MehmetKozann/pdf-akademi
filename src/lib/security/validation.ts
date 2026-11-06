@@ -159,30 +159,32 @@ export const settingsUpdateSchema = z.object({
     .optional(),
 });
 
-export function validatePdfFile(
+export const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".pptx"] as const;
+export type AllowedExtension = (typeof ALLOWED_EXTENSIONS)[number];
+
+export function validateDocumentFile(
   fileName: string,
   mimeType: string,
   buffer: Buffer
-): { valid: boolean; error?: string } {
+): { valid: boolean; error?: string; format?: "pdf" | "docx" | "pptx" } {
   const maxMb = Number(process.env.MAX_FILE_SIZE_MB || 25);
   const maxBytes = maxMb * 1024 * 1024;
+  const lowerName = fileName.toLowerCase();
 
-  if (!fileName.toLowerCase().endsWith(".pdf")) {
+  let format: "pdf" | "docx" | "pptx" | null = null;
+  if (lowerName.endsWith(".pdf")) format = "pdf";
+  else if (lowerName.endsWith(".docx")) format = "docx";
+  else if (lowerName.endsWith(".pptx")) format = "pptx";
+
+  if (!format) {
     return {
       valid: false,
-      error: "Yalnızca .pdf uzantılı dosyalar yüklenebilir.",
-    };
-  }
-
-  if (mimeType && mimeType !== "application/pdf" && mimeType !== "application/x-pdf") {
-    return {
-      valid: false,
-      error: "Geçersiz dosya türü. Lütfen geçerli bir PDF belgesi seçiniz.",
+      error: "Yalnızca PDF (.pdf), Word (.docx) ve PowerPoint (.pptx) dosyaları yüklenebilir.",
     };
   }
 
   if (buffer.byteLength === 0) {
-    return { valid: false, error: "Yüklenen PDF dosyası boş." };
+    return { valid: false, error: "Yüklenen dosya boş." };
   }
 
   if (buffer.byteLength > maxBytes) {
@@ -192,15 +194,27 @@ export function validatePdfFile(
     };
   }
 
-  // Verify PDF magic header (%PDF-) within first 1024 bytes
-  const headerSlice = buffer.subarray(0, Math.min(1024, buffer.byteLength)).toString("latin1");
-  if (!headerSlice.includes("%PDF-")) {
-    return {
-      valid: false,
-      error: "Dosya içeriği geçerli bir PDF imzası (%PDF-) taşımıyor.",
-    };
+  if (format === "pdf") {
+    const headerSlice = buffer.subarray(0, Math.min(1024, buffer.byteLength)).toString("latin1");
+    if (!headerSlice.includes("%PDF-")) {
+      return {
+        valid: false,
+        error: "Dosya içeriği geçerli bir PDF imzası (%PDF-) taşımıyor.",
+      };
+    }
+  } else if (format === "docx" || format === "pptx") {
+    // DOCX and PPTX are ZIP archives starting with PK\x03\x04
+    if (buffer.length < 4 || buffer[0] !== 0x50 || buffer[1] !== 0x4b) {
+      return {
+        valid: false,
+        error: `Dosya içeriği geçerli bir ${format.toUpperCase()} belgesi değil.`,
+      };
+    }
   }
 
-  return { valid: true };
+  return { valid: true, format };
 }
+
+// Backward compatible alias
+export const validatePdfFile = validateDocumentFile;
 

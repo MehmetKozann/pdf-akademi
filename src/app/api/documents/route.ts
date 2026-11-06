@@ -6,7 +6,7 @@ import { requireAuthUser } from "@/lib/auth/session";
 import { repository } from "@/lib/db/repository";
 import { extractAndChunkPdf } from "@/lib/pdf/processor";
 import { checkRateLimit, rateLimitResponse } from "@/lib/security/rate-limit";
-import { validatePdfFile } from "@/lib/security/validation";
+import { validateDocumentFile } from "@/lib/security/validation";
 import { sanitizeFileName } from "@/lib/utils";
 import type { DocumentRecord } from "@/types/database";
 
@@ -47,10 +47,10 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const validation = validatePdfFile(safeFileName, file.type, buffer);
+    const validation = validateDocumentFile(safeFileName, file.type, buffer);
     if (!validation.valid) {
       return NextResponse.json(
-        { error: validation.error || "Geçersiz PDF dosyası." },
+        { error: validation.error || "Geçersiz dosya." },
         { status: 400 }
       );
     }
@@ -64,12 +64,13 @@ export async function POST(req: NextRequest) {
     const baseTitle =
       typeof customTitleRaw === "string" && customTitleRaw.trim().length > 0
         ? customTitleRaw.trim()
-        : safeFileName.replace(/\.pdf$/i, "");
+        : safeFileName.replace(/\.(pdf|docx|pptx)$/i, "");
 
-    // 1. Store PDF binary securely
+    // 1. Store file binary securely
+    const ext = safeFileName.split(".").pop() || "pdf";
     const storagePath = await repository.uploadPdfBinary(
       user.id,
-      documentId,
+      `${documentId}.${ext}`,
       buffer
     );
 
@@ -108,6 +109,7 @@ export async function POST(req: NextRequest) {
         buffer,
         documentId,
         userId: user.id,
+        fileName: safeFileName,
       });
 
       // 4. Generate embeddings for chunks (batch in groups of 32)
