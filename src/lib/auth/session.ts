@@ -61,6 +61,56 @@ function verifySessionToken(token: string): string | null {
 }
 
 export async function getCurrentUser(): Promise<UserProfile> {
+  if (isSupabaseConfigured()) {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
+
+    if (authUser) {
+      const { data: profile } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", authUser.id)
+        .single();
+
+      if (profile) return profile as UserProfile;
+    }
+
+    // Single-user default profile in Supabase mode (when login screen is bypassed)
+    const defaultUserId = "00000000-0000-4000-8000-000000000001";
+    const { data: existingUser } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", defaultUserId)
+      .single();
+
+    if (existingUser) {
+      return existingUser as UserProfile;
+    }
+
+    const now = new Date().toISOString();
+    const defaultUser: UserProfile = {
+      id: defaultUserId,
+      email: "ogrenci@akademikai.local",
+      full_name: "Öğrenci",
+      university: "",
+      department: "",
+      theme_preference: "light",
+      ai_preferences: {},
+      created_at: now,
+      updated_at: now,
+    };
+
+    const { data: createdUser } = await supabase
+      .from("users")
+      .upsert(defaultUser)
+      .select("*")
+      .single();
+
+    return (createdUser as UserProfile) || defaultUser;
+  }
+
   const db = readLocalDb();
   if (db.users.length > 0) {
     return db.users[0];
