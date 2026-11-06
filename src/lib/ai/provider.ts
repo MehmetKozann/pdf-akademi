@@ -17,6 +17,10 @@ export interface LLMCompletionParams {
   jsonMode?: boolean;
   preferredProvider?: AIProviderType;
   preferredModel?: string;
+  fileData?: {
+    mimeType: string;
+    base64: string;
+  };
 }
 
 export function computeLocalEmbedding(text: string, dims = 256): number[] {
@@ -168,6 +172,17 @@ export async function completeWithLLM(
         genConfig.thinkingConfig = { thinkingBudget: 256 };
       }
 
+      const userParts: Record<string, unknown>[] = [];
+      if (params.fileData) {
+        userParts.push({
+          inlineData: {
+            mimeType: params.fileData.mimeType,
+            data: params.fileData.base64,
+          },
+        });
+      }
+      userParts.push({ text: params.userPrompt });
+
       return fetch(url, {
         method: "POST",
         headers: {
@@ -185,7 +200,7 @@ export async function completeWithLLM(
           contents: [
             {
               role: "user",
-              parts: [{ text: params.userPrompt }],
+              parts: userParts,
             },
           ],
           generationConfig: genConfig,

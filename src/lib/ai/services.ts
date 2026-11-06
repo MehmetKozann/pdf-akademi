@@ -223,29 +223,47 @@ export async function generateStudyNoteWithAI(params: {
     params.user.id,
     params.document.id
   );
+
+  let fileData: { mimeType: string; base64: string } | undefined;
+  let contextText = "";
+
   if (allChunks.length === 0) {
-    throw new Error("Belge içeriği bulunamadı. Lütfen geçerli bir PDF yükleyiniz.");
-  }
-
-  let targetChunks: DocumentChunk[];
-  if (params.focusTopic?.trim()) {
-    const [qEmb] = await generateEmbeddings(
-      [params.focusTopic],
-      params.user.ai_preferences?.preferred_provider
+    // If text chunks are missing (e.g. scanned image-only PDF), download binary and use Gemini multimodal PDF
+    const buf = await repository.downloadPdfBinary(
+      params.user.id,
+      params.document.storage_path
     );
-    const retrieved = await repository.retrieveRelevantChunks({
-      userId: params.user.id,
-      query: params.focusTopic,
-      queryEmbedding: qEmb,
-      documentIds: [params.document.id],
-      topK: 14,
-    });
-    targetChunks = retrieved.map((r) => r.chunk);
+    if (!buf || buf.length === 0) {
+      throw new Error("Belge içeriği bulunamadı. Lütfen geçerli bir PDF yükleyiniz.");
+    }
+    const ext = params.document.file_name.toLowerCase().endsWith(".pdf")
+      ? "application/pdf"
+      : "application/octet-stream";
+    fileData = {
+      mimeType: ext,
+      base64: buf.toString("base64"),
+    };
+    contextText = "(Belge taranmış/vektörel slaytlardan oluştuğu için doğrudan ekteki görsel/PDF dosyasından analiz edilecektir.)";
   } else {
-    targetChunks = selectRepresentativeChunks(allChunks, 18);
+    let targetChunks: DocumentChunk[];
+    if (params.focusTopic?.trim()) {
+      const [qEmb] = await generateEmbeddings(
+        [params.focusTopic],
+        params.user.ai_preferences?.preferred_provider
+      );
+      const retrieved = await repository.retrieveRelevantChunks({
+        userId: params.user.id,
+        query: params.focusTopic,
+        queryEmbedding: qEmb,
+        documentIds: [params.document.id],
+        topK: 14,
+      });
+      targetChunks = retrieved.map((r) => r.chunk);
+    } else {
+      targetChunks = selectRepresentativeChunks(allChunks, 18);
+    }
+    contextText = formatChunksForPrompt(targetChunks);
   }
-
-  const contextText = formatChunksForPrompt(targetChunks);
   const typeMeta = STUDY_NOTE_TYPE_LABELS[params.noteType];
 
   const systemPrompt = `Sen seçkin bir üniversite profesörü ve akademik eğitim tasarımcısısın.
@@ -274,6 +292,7 @@ Lütfen doğrudan "# [Akademik Ders Notu Başlığı]" ile başlayan, alt başl�
     jsonMode: false,
     preferredProvider: params.user.ai_preferences?.preferred_provider,
     preferredModel: params.user.ai_preferences?.preferred_model,
+    fileData,
   });
 
   const cleanedMarkdown = rawMarkdown
@@ -346,12 +365,28 @@ export async function generateQuestionsBatchWithAI(params: {
     params.user.id,
     params.document.id
   );
-  if (allChunks.length === 0) {
-    throw new Error("Belge metin parçaları bulunamadı.");
-  }
 
-  let selectedChunks: DocumentChunk[];
-  if (params.topics && params.topics.length > 0) {
+  let selectedChunks: DocumentChunk[] = [];
+  let fileData: { mimeType: string; base64: string } | undefined;
+  let contextText = "";
+
+  if (allChunks.length === 0) {
+    const buf = await repository.downloadPdfBinary(
+      params.user.id,
+      params.document.storage_path
+    );
+    if (!buf || buf.length === 0) {
+      throw new Error("Belge içeriği bulunamadı.");
+    }
+    const ext = params.document.file_name.toLowerCase().endsWith(".pdf")
+      ? "application/pdf"
+      : "application/octet-stream";
+    fileData = {
+      mimeType: ext,
+      base64: buf.toString("base64"),
+    };
+    contextText = "(Belge taranmış/vektörel slaytlardan oluştuğu için sorular doğrudan ekteki görsel/PDF dosyasından üretilecektir.)";
+  } else if (params.topics && params.topics.length > 0) {
     const topicQuery = params.topics.join(" ");
     const [qEmb] = await generateEmbeddings(
       [topicQuery],
@@ -368,11 +403,11 @@ export async function generateQuestionsBatchWithAI(params: {
       retrieved.length > 0
         ? retrieved.map((r) => r.chunk)
         : selectRepresentativeChunks(allChunks, 16);
+    contextText = formatChunksForPrompt(selectedChunks);
   } else {
     selectedChunks = selectRepresentativeChunks(allChunks, 18);
+    contextText = formatChunksForPrompt(selectedChunks);
   }
-
-  const contextText = formatChunksForPrompt(selectedChunks);
   const optionCount = params.mcqOptionCount ?? 5;
   const optionLabels =
     optionCount === 4 ? ["A", "B", "C", "D"] : ["A", "B", "C", "D", "E"];
@@ -457,6 +492,7 @@ Aşağıdaki JSON yapısında TAM ${params.count} soru döndür:
     jsonMode: true,
     preferredProvider: params.user.ai_preferences?.preferred_provider,
     preferredModel: params.user.ai_preferences?.preferred_model,
+    fileData,
   });
 
   const parsed = parseJsonFromLLM<{
