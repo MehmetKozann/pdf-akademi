@@ -108,45 +108,100 @@ export default function PdfUploadPage() {
       ]);
 
       try {
-        const formData = new FormData();
-        formData.append("file", file);
-        if (uploadCourseId) {
-          formData.append("courseId", uploadCourseId);
+        // Step 1: Ask backend for signed upload URL (Supabase direct upload) or local fallback
+        const initRes = await fetch("/api/documents/upload-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileName: file.name,
+            fileSize: file.size,
+          }),
+        });
+
+        if (!initRes.ok) {
+          const errData = await initRes.json().catch(() => ({}));
+          throw new Error(errData.error || "Yükleme başlatılamadı.");
         }
 
-        // Simulate smooth intermediate progress while server extracts & chunks
-        const interval = setInterval(() => {
-          setQueue((prev) =>
-            prev.map((item) =>
-              item.id === qId && item.progress < 88
-                ? { ...item, progress: item.progress + 12 }
-                : item
-            )
-          );
-        }, 450);
+        const initData = await initRes.json();
 
-        const res = await fetch("/api/documents", {
-          method: "POST",
-          body: formData,
-        });
-        clearInterval(interval);
+        // Step 2: Upload binary
+        if (initData.signedUrl) {
+          // Direct upload to Supabase Storage (bypasses Vercel 4.5MB limit!)
+          const uploadRes = await fetch(initData.signedUrl, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/pdf",
+            },
+            body: file,
+          });
 
-        const data = await res.json();
-        if (!res.ok) {
+          if (!uploadRes.ok) {
+            throw new Error("Dosya bulut depolama alanına yüklenemedi.");
+          }
+
           setQueue((prev) =>
             prev.map((item) =>
               item.id === qId
                 ? {
                     ...item,
-                    status: "error",
-                    progress: 100,
-                    message: data.error || "Yükleme başarısız oldu.",
+                    progress: 60,
+                    message: "Dosya yüklendi, yapay zeka metinleri analiz ediyor...",
                   }
                 : item
             )
           );
-          toast(data.error || `${file.name} yüklenemedi.`, "error");
+
+          // Step 3: Trigger server processing and AI analysis
+          const processRes = await fetch("/api/documents/process", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              documentId: initData.documentId,
+              fileName: initData.safeFileName,
+              fileSize: file.size,
+              storagePath: initData.storagePath,
+              courseId: uploadCourseId || null,
+            }),
+          });
+
+          const procData = await processRes.json();
+          if (!processRes.ok) {
+            throw new Error(procData.error || "Belge analizi başarısız oldu.");
+          }
+
+          setQueue((prev) =>
+            prev.map((item) =>
+              item.id === qId
+                ? {
+                    ...item,
+                    status: "done",
+                    progress: 100,
+                    message: `${procData.document.page_count} sayfa ve ${procData.chunkCount} anlamsal parça analiz edildi.`,
+                  }
+                : item
+            )
+          );
+          setDocuments((prev) => [procData.document, ...prev]);
+          toast(`"${procData.document.title}" başarıyla analiz edildi.`, "success");
         } else {
+          // Direct fallback to /api/documents for local dev
+          const formData = new FormData();
+          formData.append("file", file);
+          if (uploadCourseId) {
+            formData.append("courseId", uploadCourseId);
+          }
+
+          const res = await fetch("/api/documents", {
+            method: "POST",
+            body: formData,
+          });
+
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.error || "Yükleme başarısız oldu.");
+          }
+
           setQueue((prev) =>
             prev.map((item) =>
               item.id === qId
@@ -162,7 +217,11 @@ export default function PdfUploadPage() {
           setDocuments((prev) => [data.document, ...prev]);
           toast(`"${data.document.title}" başarıyla analiz edildi.`, "success");
         }
-      } catch {
+      } catch (uploadError) {
+        const errorMsg =
+          uploadError instanceof Error
+            ? uploadError.message
+            : "Yükleme sırasında hata oluştu.";
         setQueue((prev) =>
           prev.map((item) =>
             item.id === qId
@@ -170,11 +229,12 @@ export default function PdfUploadPage() {
                   ...item,
                   status: "error",
                   progress: 100,
-                  message: "Ağ bağlantı hatası oluştu.",
+                  message: errorMsg,
                 }
               : item
           )
         );
+        toast(errorMsg, "error");
       }
     }
   }
