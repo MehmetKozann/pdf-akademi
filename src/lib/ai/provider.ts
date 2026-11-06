@@ -208,23 +208,46 @@ export async function completeWithLLM(
       });
     };
 
-    // 1. Try with the requested model (e.g. gemini-2.5-flash)
-    let res = await tryGenerateWithModel(cfg.model);
+    // Robust retry & fallback mechanism:
+    // If a model encounters 503 (High Demand / Spikes) or 429, try alternatives automatically
+    const modelCandidates = [
+      cfg.model,
+      "gemini-2.5-flash",
+      "gemini-3.5-flash",
+      "gemini-3.1-flash-lite",
+      "gemini-3-flash-preview",
+    ].filter((m, idx, arr) => arr.indexOf(m) === idx);
 
-    // 2. If 503 (high demand) or 429, retry once after a short wait with fallback (gemini-2.0-flash / gemini-1.5-flash)
-    if (res.status === 503 || res.status === 429) {
-      await new Promise((r) => setTimeout(r, 1500));
-      const fallbackModel = cfg.model.includes("2.5") ? "gemini-2.0-flash" : "gemini-1.5-flash";
-      const fallbackRes = await tryGenerateWithModel(fallbackModel);
-      if (fallbackRes.ok) {
-        res = fallbackRes;
+    let res: Response | null = null;
+    let lastErrorText = "";
+
+    for (let attempt = 0; attempt < modelCandidates.length; attempt++) {
+      const currentModel = modelCandidates[attempt];
+      try {
+        res = await tryGenerateWithModel(currentModel);
+        if (res.ok) {
+          break;
+        }
+
+        // 503 (High demand) or 429: wait a brief moment and proceed to fallback model
+        if (res.status === 503 || res.status === 429) {
+          lastErrorText = await res.text();
+          await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+          continue;
+        }
+
+        // Other client/auth errors (400, 401, 403): do not mask, throw immediately
+        lastErrorText = await res.text();
+        break;
+      } catch (networkErr) {
+        lastErrorText =
+          networkErr instanceof Error ? networkErr.message : "Bağlantı hatası";
       }
     }
 
-    if (!res.ok) {
-      const errText = await res.text();
+    if (!res || !res.ok) {
       throw new Error(
-        `Google Gemini API Hatası (${res.status}): ${errText.slice(0, 240)}`
+        `Google Gemini API Hatası (${res?.status || 503}): ${lastErrorText.slice(0, 240)}`
       );
     }
 
