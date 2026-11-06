@@ -16,6 +16,8 @@ import { repository } from "@/lib/db/repository";
 import { formatFileSize, formatRelativeTR } from "@/lib/utils";
 import { STUDY_ACTIVITY_LABELS } from "@/types/database";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardOverviewPage() {
   const user = (await getCurrentUser())!;
 
